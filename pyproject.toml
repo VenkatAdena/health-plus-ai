@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "healthplus-ai"
+version = "0.1.0"
+description = "HealthPlus AI - Enterprise Diagnostic Intelligence Platform"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+    "rich>=13.7",
+    "pymupdf>=1.24",
+    "chromadb>=1.0",
+    "langchain-text-splitters>=0.3",
+    "sentence-transformers>=3.0",
+    "anthropic>=0.40",
+    "openai>=1.50",
+    "streamlit>=1.36",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "quality: retrieval-quality evals against the live index (needs data/chroma)",
+]

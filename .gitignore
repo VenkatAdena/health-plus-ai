@@ -1,0 +1,27 @@
+# Secrets — never commit these
+.env
+
+# Runtime artifacts (the source corpus in data/knowledge_base/ IS tracked)
+data/chroma/
+data/previews/
+data/samples/
+logs/
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

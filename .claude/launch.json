@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "healthplus-app",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "-m",
+        "streamlit",
+        "run",
+        "src/healthplus/presentation/app.py",
+        "--server.headless",
+        "true",
+        "--server.port",
+        "8501"
+      ],
+      "port": 8501
+    }
+  ]
+}
