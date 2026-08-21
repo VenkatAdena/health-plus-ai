@@ -256,145 +256,9 @@ HealthPlus-AI/
 │       │   ├── conversation_memory.py # Windowed in-memory per-session chat history
 │       │   ├── knowledge_base_service.py  # Ingestion + search facade
 │       │   ├── prompt_builder.py      # System-prompt and message-list construction
-│       │   ├── query_processor.py     # Query normalisation and validation
-│       │   └── retriever.py           # Similarity-floor filtering over KB search
 │       │
-│       ├── llm/                       # Layer — LLM adapter boundary
-│       │   ├── claude_client.py       # Only file that imports the Anthropic SDK
-│       │   └── openai_client.py       # Only file that imports the OpenAI SDK
-│       │
-│       ├── vector_database/           # Layer 4 — embedding + vector storage
-│       │   ├── embeddings.py          # Lazy-loaded SentenceTransformer wrapper
-│       │   └── vector_store.py        # Only file that imports chromadb
-│       │
-│       ├── document_pipeline/         # Layer 5 — PDF processing
-│       │   ├── chunker.py             # Page-preserving overlapping text splitter
-│       │   ├── pdf_loader.py          # PyMuPDF text extraction + SHA-256 doc ID
-│       │   └── text_cleaner.py        # Unicode normalisation + whitespace cleanup
-│       │
-│       ├── knowledge_base/            # Layer 6 — domain models
-│       │   └── models.py              # Pydantic models: Document, Chunk, SearchResult, etc.
-│       │
-│       ├── config/                    # Cross-cutting — typed configuration
-│       │   └── settings.py            # Single Settings class; loaded once via get_settings()
-│       │
-│       └── core/                      # Cross-cutting — shared utilities
-│           ├── exceptions.py          # Custom exception hierarchy
-│           └── logging.py             # Console + rotating-file logging setup
-│
-├── scripts/                           # Operational CLI scripts (not part of the package)
-│   ├── ingest.py                      # Batch PDF ingestion with Rich report table
-│   ├── search.py                      # CLI semantic search
-│   ├── eval_retrieval.py              # Golden-set retrieval-quality evaluation
-│   ├── preview_pipeline.py            # Dry-run pipeline visualiser
-│   ├── verify_setup.py                # Config + logging smoke test
-│   └── create_architecture_corpus.py  # One-time script that generated the sample PDFs
-│
-├── tests/                             # Pytest test suite
-│   ├── test_models.py                 # DocumentCategory taxonomy
-│   ├── test_text_cleaner.py           # TextCleaner logic
-│   ├── test_chunker.py                # DocumentChunker determinism + metadata
-│   ├── test_batch_ingestion.py        # Resilient batch: one failure doesn't stop others
-│   ├── test_query_processor.py        # Query normalisation + length validation
-│   ├── test_retriever.py              # Similarity-floor filtering
-│   ├── test_context_manager.py        # Budget capping + deduplication + numbering
-│   ├── test_prompt_builder.py         # System-prompt guardrails + message assembly
-│   ├── test_conversation_memory.py    # Windowing + isolation + copy semantics
-│   ├── test_claude_client.py          # Fail-fast on missing key; injected client
-│   ├── test_chat_service.py           # Orchestration with fakes for all collaborators
-│   ├── test_rag_integration.py        # End-to-end RAG over a real (isolated) ChromaDB
-│   └── test_retrieval_quality.py      # Golden-set hit-rate eval against live index
-│
-├── data/
-│   ├── knowledge_base/pdfs/           # 8 fictional hospital PDFs (tracked by git)
-│   ├── chroma/                        # ChromaDB vector store (gitignored, derived)
-│   └── previews/                      # JSON pipeline previews (gitignored)
-│
-├── docs/
-│   ├── architecture/                  # Design records + enterprise diagram
-│   └── guides/                        # setup.md · deployment.md
-│
-├── logs/                              # Rotating log files (gitignored)
-│
-├── .env.example                       # Environment variable template
-├── .gitignore
-├── pyproject.toml                     # Package metadata + dependency list
-└── README.md                          # This file
-```
-
----
-
-## 7. Technology Stack
-
-### Core language
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **Python** | ≥ 3.11 | Main application language. `StrEnum` (used for `DocumentCategory`) requires 3.11+. |
-
-### LLM backends
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **Anthropic SDK** (`anthropic`) | ≥ 0.40 | Powers the Claude chat backend. Used exclusively in `llm/claude_client.py` to call the Messages API in streaming mode. `claude-sonnet-5` is the default model. |
-| **OpenAI SDK** (`openai`) | ≥ 1.50 | Powers the optional ChatGPT backend. Used exclusively in `llm/openai_client.py`. Streaming is used here too so the UI behaviour is identical. |
-
-Both clients are wrapped behind the same `stream_reply(system, messages) → Iterator[str]` interface, defined as a `Protocol` in `application/components.py`. Swapping backends or adding a new one never touches `ChatService` or the UI.
-
-### Vector database and embeddings
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **ChromaDB** (`chromadb`) | ≥ 1.0 | Persistent local vector store. Configured with cosine-similarity space so scores are in [−1, 1] and a meaningful floor (0.30) can be applied. Used exclusively in `vector_database/vector_store.py`. |
-| **Sentence Transformers** (`sentence-transformers`) | ≥ 3.0 | Loads the `BAAI/bge-small-en-v1.5` embedding model (~130 MB, 384 dimensions). Embeddings are unit-normalised so cosine similarity is computed correctly. Used in `vector_database/embeddings.py`. Model is loaded lazily on first use. |
-
-### Document processing
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **PyMuPDF** (`pymupdf`) / `fitz` | ≥ 1.24 | Fast, reliable PDF text extraction. Used in `document_pipeline/pdf_loader.py`. Doc IDs are SHA-256 hashes of file bytes, making ingestion idempotent. |
-| **LangChain Text Splitters** (`langchain-text-splitters`) | ≥ 0.3 | `RecursiveCharacterTextSplitter` breaks cleaned page text into overlapping chunks at paragraph → line → sentence → word → character boundaries. Used in `document_pipeline/chunker.py`. |
-
-### Configuration and validation
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **Pydantic** (`pydantic`) | ≥ 2.7 | Data models (`Document`, `Chunk`, `SearchResult`, `Settings`, etc.). Validates every domain boundary so malformed data fails loudly at the stage boundary instead of corrupting the store silently. |
-| **Pydantic Settings** (`pydantic-settings`) | ≥ 2.2 | Reads `HEALTHPLUS_*` environment variables (and a `.env` file) into a typed, validated `Settings` object. Used in `config/settings.py`. |
-| **python-dotenv** (`python-dotenv`) | ≥ 1.0 | Reads the `.env` file into the environment before Pydantic Settings picks it up. |
-
-### Web interface
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **Streamlit** (`streamlit`) | ≥ 1.36 | Single-file web framework for the chat portal. `st.write_stream` renders token-by-token streaming. `st.cache_resource` ensures the heavy singletons (embedding model, ChromaDB client, ChatService) are built once per process. Used in `presentation/app.py`. |
-
-### Developer tooling
-
-| Technology | Version | Why / Where used |
-|---|---|---|
-| **Rich** (`rich`) | ≥ 13.7 | Beautiful terminal output for CLI scripts (`ingest.py`, `search.py`, etc.) and the `RichHandler` used for colourised console logging in development. |
-| **pytest** (`pytest`) | ≥ 8.0 | Test runner. `[dev]` optional dependency. Custom marker `quality` gates retrieval evals against the live index. |
-| **httpx** | transitive | Used by both LLM clients to inject a custom CA bundle for TLS verification on macOS with corporate certificates. |
-| **certifi** | transitive | Provides the baseline CA bundle that is merged with macOS system keychain certificates in `claude_client._get_ca_bundle()`. |
-
----
-
-## 8. Environments
-
-The `HEALTHPLUS_ENVIRONMENT` variable selects one of three named environments: `development`, `staging`, or `production`. The application reads this at startup but does not change its behaviour based on it today — the field exists so environment-specific branching (e.g. stricter logging in production, richer debug output in development) can be added without a schema change.
-
-### Local development
-
-```dotenv
-HEALTHPLUS_ENVIRONMENT=development
-HEALTHPLUS_DEBUG=false
-HEALTHPLUS_LOG_LEVEL=DEBUG     # Set to DEBUG for verbose pipeline logging
-```
-
-- Run with `streamlit run src/healthplus/presentation/app.py`.
-- ChromaDB persists in `data/chroma/` on disk; `logs/` holds rotating log files.
-- The embedding model is cached by Sentence Transformers in `~/.cache/huggingface/` after the first download.
+… [8460 characters truncated] …
+ched by Sentence Transformers in `~/.cache/huggingface/` after the first download.
 
 ### Testing
 
@@ -608,6 +472,12 @@ python -m pytest
 | `openai` | ChatGPT LLM backend. Isolated to `llm/openai_client.py`. |
 | `pydantic` v2 | Domain model validation. A downgrade to v1 would require rewriting all models. |
 | `streamlit` ≥ 1.36 | `st.write_stream` (used for token-by-token rendering) requires 1.36+. |
+
+---
+
+## 12. Security
+
+**Protected Health Information (PHI) must never be logged.** All logging, debugging output, and error messages must be reviewed to ensure they do not capture or expose patient data, medical records, or any personally identifiable information. When deploying to production, enable log aggregation and retention policies that comply with HIPAA and your organization's data protection standards.
 
 ---
 
