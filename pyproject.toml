@@ -20,6 +20,7 @@ dependencies = [
     "anthropic>=0.40",
     "openai>=1.50",
     "streamlit>=1.36",
+    "pytest>=8.0",
 ]
 
 [project.optional-dependencies]
