@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Iterator
 
+from healthplus.core import redact_phi
 from healthplus.knowledge_base.models import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -74,12 +75,20 @@ class ChatService:
         scale, and revisit with a similarity-based short-circuit if cost bites.
         """
         clean_query = self._query_processor.process(query)
-        results = self._retriever.retrieve(clean_query, category=category)
+        # Redact PHI before retrieval and prompt construction
+        redaction_result = redact_phi(clean_query)
+        redacted_query = redaction_result.redacted_text
+        if redaction_result.identifier_types:
+            logger.info(
+                "PHI redacted in query: %s", ", ".join(redaction_result.identifier_types)
+            )
+        
+        results = self._retriever.retrieve(redacted_query, category=category)
         context = self._context_manager.assemble(results)
 
         system = self._prompt_builder.build_system(context.context_text)
         history = self._memory.history(conversation_id)
-        messages = self._prompt_builder.build_messages(clean_query, history)
+        messages = self._prompt_builder.build_messages(redacted_query, history)
 
         logger.info(
             "Chat turn: conversation=%s, sources=%d, history_messages=%d",
@@ -96,8 +105,12 @@ class ChatService:
             for token in self._llm.stream_reply(system, messages):
                 pieces.append(token)
                 yield token
-            self._memory.append(conversation_id, "user", clean_query)
-            self._memory.append(conversation_id, "assistant", "".join(pieces))
+            # Redact PHI before writing to conversation memory
+            redacted_user_msg = redact_phi(redacted_query).redacted_text
+            assistant_response = "".join(pieces)
+            redacted_assistant_msg = redact_phi(assistant_response).redacted_text
+            self._memory.append(conversation_id, "user", redacted_user_msg)
+            self._memory.append(conversation_id, "assistant", redacted_assistant_msg)
 
         return ChatAnswer(sources=list(context.sources), tokens=_stream())
 
